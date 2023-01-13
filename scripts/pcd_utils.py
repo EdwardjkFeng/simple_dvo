@@ -39,7 +39,7 @@ def generate_o3d_pcd(size, rgb_path, depth_path, K, visualize=False):
         plt.title('Redwood depth image')
         plt.imshow(rgbd_image.depth)
         plt.show()
-        o3d.visualization.draw_geometries([pcd])
+        # o3d.visualization.draw_geometries([pcd])
 
     return pcd
 

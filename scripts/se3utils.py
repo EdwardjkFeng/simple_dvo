@@ -28,6 +28,14 @@ def e_so3(omega):
     return e_omega
 
 
+def SO3_log(R):
+    theta = np.arccos((np.trace(R) - 1) / 2)
+    ln_R = theta / (2 * np.sin(theta)) * (R - np.transpose(R))
+    omega = np.asarray([[ln_R[2, 1]], [ln_R[0, 2]], [ln_R[1, 0]]])
+
+    return omega
+
+
 # SE(3) exponential map
 def SE3_exp(xi):
     u = xi[:3]
@@ -56,6 +64,20 @@ def SE3_exp(xi):
     return np.concatenate((np.concatenate((R, t), axis=1), lastrow), axis=0)
 
 
+def SE3_log(T):
+    R = T[0:3, 0:3]
+    t = np.reshape(T[0:3, 3], (3, 1))
+    
+    theta = np.arccos((np.trace(R) - 1) / 2)
+    ln_R = theta / (2 * np.sin(theta)) * (R - np.transpose(R))
+    omega = np.asarray([[ln_R[2, 1]], [ln_R[0, 2]], [ln_R[1, 0]]])
+
+    V = np.identity(3) + (1 - np.cos(theta)) / (theta * theta) * ln_R + (theta - np.sin(theta)) / (theta * theta * theta) * np.dot(ln_R, ln_R)
+    t_pi = (np.dot(np.linalg.inv(V), t)).reshape((3, 1))
+
+    xi = np.concatenate((t_pi, omega), axis=0)
+
+    return xi
 
 # Functions to help compute the left jacobian for SE(3)
 

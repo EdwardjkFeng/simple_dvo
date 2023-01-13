@@ -1,8 +1,10 @@
 import cv2 as cv
+import open3d as o3d
 import sys
 
 import rgbd_utils as utils
 import image_pyramid
+import matplotlib.pyplot as plt
 
 if __name__ ==  '__main__':
             
@@ -13,7 +15,7 @@ if __name__ ==  '__main__':
     depth2 = cv.imread('../data/depth2.png', 0)
     n_depth1 = utils.img2float(depth1)
 
-    show = True
+    show = False
     if show:
         cv.imshow("rgb1", rgb1)
         cv.imshow("rgb2", rgb2)
@@ -34,4 +36,14 @@ if __name__ ==  '__main__':
     test = utils.bilinear_interpolation_test(depth1, x, y, width, height)
     print("My implementation : ", my_imp, " == Counter test :", test, " ? : ", my_imp == test) 
     """
-    
+    rgb = o3d.io.read_image("../data/rgb2.png")
+    depth = o3d.io.read_image("../data/depth2.png")
+    rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(o3d.io.read_image("../data/rgb.png"), o3d.io.read_image("../data/depth.png"))
+    print(rgbd_image)
+    plt.subplot(1, 2, 1)
+    plt.title('Redwood grayscale image')
+    plt.imshow(rgbd_image.color)
+    plt.subplot(1, 2, 2)
+    plt.title('Redwood depth image')
+    plt.imshow(rgbd_image.depth)
+    plt.show()
