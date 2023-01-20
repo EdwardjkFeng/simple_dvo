@@ -25,7 +25,7 @@ def rgbd_pointcloud(rgb, depth, focal_legth, cx, cy, scaling_factor):
 
             X = (u - cx) * Z / focal_legth
             Y = (v - cy) * Z / focal_legth
-            # pointcloud.append((X, Y, Z, intensity))
+            # pointcloud.append((X, Y, Z, intensity)) 
             points[v, u, :] = [X, Y, Z]
     points = np.reshape(points, (-1, 3))
     colors = np.reshape(rgb, (-1, 3))
@@ -165,8 +165,8 @@ def computeImageGradient(img):
     height = img.shape[0]
 
     # Exploit the fact that we can perform matrix operations on images ,to compute gradients quicker
-    gradX[:, 1:width-1] = img[:, 2:] - img[:, 0:width-2]
-    gradY[1:height-1, :] = img[2:, :] - img[0:height-2, :]
+    gradX[:, 1:width-1] = 0.5 * (img[:, 2:] - img[:, 0:width-2])
+    gradY[1:height-1, :] = 0.5* (img[2:, :] - img[0:height-2, :])
 
     return gradX, gradY
 
@@ -201,11 +201,15 @@ def computeJacobian(gray_prev, depth_prev, gray_cur, K, xi, residuals, cache_poi
 
             J_img = np.reshape(np.asarray([[grad_x[v, u], grad_y[v, u]]]), (1, 2))
             J_pi = np.reshape(np.asarray([[f/Z, 0, -f*X/(Z*Z)], [0, f/Z, -f*Y/(Z*Z)]]), (2, 3))
+
+            J_w = np.reshape(np.asarray([[f/Z, 0, -f*X/(Z*Z), -f*(X*Y)/(Z*Z), f*(1+(X*X)/(Z*Z)), -f*Y/Z], [0, f/Z, -f*Y/(Z*Z), -f*(1+(Y*Y)/(Z*Z)), f*X*Y/(Z*Z), f*X/Z]]), (2, 6))
             J_exp = np.concatenate((np.eye(3), se3utils.SO3_hat(-np.asarray([X, Y, Z]))), axis=1)
             J_exp = np.dot(J_exp, se3utils.SE3_left_jacobian(xi))
-            J[v, u, :] = residuals[v, u] * np.reshape(np.dot(J_img, np.dot(J_pi, J_exp)), (6))
+            # J[v, u, :] = residuals[v, u] * np.reshape(np.dot(J_img, np.dot(J_pi, J_exp)), (6))
+            J[v, u, :] = - np.reshape(np.matmul(J_img, J_w), (6))
+            if not np.isfinite(J[v, u, 0]):
+                J[v, u, :] = 0
 
-    
     return J
 
 
@@ -251,3 +255,33 @@ def computeJacobian_color(gray_prev, depth_prev, gray_cur, depth_cur, K, xi, res
 
     
     return J
+
+
+def do_gaussian_newton(img_gray_prev, img_depth_prev, img_gray_cur, xi, K, max_iters):
+    # Gaussian Newton solver for direct image alignment
+    xi_prev = xi
+    # H = np.zeros((6, 6)) # Hessian for GN optimization
+    # inc = np.zeros((6, 1)) # step increments
+
+    err_prev = np.inf
+    for iter in range(max_iters):
+        residuals, pcd = computeResiduals(img_gray_prev, img_depth_prev, img_gray_cur, K, xi_prev)
+
+        J = computeJacobian(img_gray_prev, img_depth_prev, img_gray_cur, K, xi, residuals, pcd).reshape(-1, 6)
+
+        Jt = J.transpose()
+
+        err = np.sum(np.matmul(residuals.transpose(), residuals))
+
+        b = np.matmul(Jt, residuals.reshape(-1))
+        H = np.matmul(Jt, J)
+        inc = - np.linalg.solve(H, b)
+
+        xi_prev = xi
+        xi = se3utils.SE3_log(se3utils.SE3_exp(xi) @ se3utils.SE3_exp(inc))
+
+        if (err / err_prev > 0.995):
+            break
+        err_prev = err
+
+    return se3utils.SE3_exp(xi), xi
