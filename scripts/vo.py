@@ -27,7 +27,7 @@ def parse_arg():
         RGB frame to be processed', required = True)
     parser.add_argument('-endFrameDepth', help='Filename (sans the .png extension) of the last \
         depth frame to be processed', required = True)
-    parser.add_argument('-numPyramidLevels', help='Number of the levels used in the pyramid', default=3)
+    parser.add_argument('-numPyramidLevels', help='Number of the levels used in the pyramid', default=1)
     parser.add_argument('-stepsize', help='Stepsize for gradient descent solver', default=1e-6)
     parser.add_argument('-numIters', help='Number of iterations to run each optimization \
         routine for', default=50)
@@ -102,36 +102,47 @@ def main(args):
 
     # Simple gradient descent test
     stepsize = 1e-6
-    max_iters = 10
+    max_iters = 50
     tol = 1e-8
     err_prev = 1e24
-    for it in range(max_iters):
-        residuals, cache_point3d = direct_image_alignment.computeResiduals(img_gray_prev, img_depth_prev, img_gray_cur, K, xi_init)
-        J = direct_image_alignment.computeJacobian(img_gray_prev, img_depth_prev, img_gray_cur, K, xi_init, residuals, cache_point3d)
-        # residuals, cache_point3d = direct_image_alignment.computeResiduals(img_gray_prev, img_depth_prev, img_gray_cur, img_depth_cur, K, xi_init)
-        # J = direct_image_alignment.computeJacobian(img_gray_prev, img_depth_prev, img_gray_cur, img_depth_cur, K, xi_init, residuals, cache_point3d)
-        # Normalize the error and the jacobian
-        err_cur = 0.5 * (1 / (img_gray_cur.shape[0] * img_gray_cur.shape[1])) * np.sum(np.dot(residuals.T, residuals))
-        grad = (1 / (img_gray_cur.shape[0] * img_gray_cur.shape[1])) * np.reshape(np.sum(J, axis=(0, 1)).T, (6, 1))
-        print("Error: ", err_cur)
-        print('Jacobian: ', np.sum(J, axis=(0, 1)))
-        xi_init += stepsize * grad
+    # for it in range(max_iters):
+    #     residuals, cache_point3d = direct_image_alignment.computeResiduals(img_gray_prev, img_depth_prev, img_gray_cur, K, xi_init)
+    #     J = direct_image_alignment.computeJacobian(img_gray_prev, img_depth_prev, img_gray_cur, K, xi_init, residuals, cache_point3d)
+    #     # residuals, cache_point3d = direct_image_alignment.computeResiduals(img_gray_prev, img_depth_prev, img_gray_cur, img_depth_cur, K, xi_init)
+    #     # J = direct_image_alignment.computeJacobian(img_gray_prev, img_depth_prev, img_gray_cur, img_depth_cur, K, xi_init, residuals, cache_point3d)
+    #     # Normalize the error and the jacobian
+    #     err_cur = 0.5 * (1 / (img_gray_cur.shape[0] * img_gray_cur.shape[1])) * np.sum(np.dot(residuals.T, residuals))
+    #     grad = (1 / (img_gray_cur.shape[0] * img_gray_cur.shape[1])) * np.reshape(np.sum(J, axis=(0, 1)).T, (6, 1))
+    #     print("Error: ", err_cur)
+    #     print('Jacobian: ', np.sum(J, axis=(0, 1)))
+    #     xi_init += stepsize * grad
 
-        # T_init = se3utils.SE3_exp(xi_init) * se3utils.SE3_exp(grad)
-        # print('T: ', T_init)
-        T_init = se3utils.SE3_exp(xi_init)
-        pcd_utils.draw_registration_result_original_color(s_pcd, t_pcd,
-                                            T_init)
-        # xi_init = se3utils.SE3_log(T_init)
-        if np.abs(err_prev - err_cur) < tol:
-            break
-        err_prev = err_cur
+    #     # T_init = se3utils.SE3_exp(xi_init) * se3utils.SE3_exp(grad)
+    #     # print('T: ', T_init)
+    #     T_init = se3utils.SE3_exp(xi_init)
+    #     pcd_utils.draw_registration_result_original_color(s_pcd, t_pcd,
+    #                                         T_init)
+    #     # xi_init = se3utils.SE3_log(T_init)
+    #     if np.abs(err_prev - err_cur) < tol:
+    #         break
+    #     err_prev = err_cur
 
-    T = se3utils.SE3_exp(xi_init)
-    print('T: ', se3utils.SE3_exp(xi_init))
-    pcd_utils.draw_registration_result_original_color(s_pcd, t_pcd,
-                                            T)
+    # T = se3utils.SE3_exp(xi_init)
+    # print('T: ', se3utils.SE3_exp(xi_init))
+    # pcd_utils.draw_registration_result_original_color(s_pcd, t_pcd,
+    #                                         T)
 
+    gray_prev, depth_prev, pyramid_intrinsics = image_pyramid.buildPyramid(img_gray_prev, img_depth_prev, num_levels=args.numPyramidLevels, focal_legth=f, cx=cx, cy=cy)
+
+    gray_cur, depth_cur, _ = image_pyramid.buildPyramid(img_gray_cur, img_depth_cur, num_levels=args.numPyramidLevels, focal_legth=f, cx=cx, cy=cy)
+            
+    for i in range(args.numPyramidLevels):
+        T, xi_init = direct_image_alignment.do_gaussian_newton(gray_prev[i], depth_prev[i], gray_cur[i], xi_init, pyramid_intrinsics[i], max_iters)
+
+
+    # T = direct_image_alignment.do_gaussian_newton(img_gray_prev, img_depth_prev, img_gray_cur, xi_init, K, max_iters)
+    # print('T: ', T)
+    pcd_utils.draw_registration_result_original_color(s_pcd, t_pcd, T)
 
 
 

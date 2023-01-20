@@ -1,6 +1,9 @@
 import cv2 as cv
 import numpy as np
 
+import os
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+
 def img2float(img: cv.Mat) -> cv.Mat:
     """ This function converts input image to normalized float """
     return cv.normalize(img.astype('float'), None, 0.0, 1.0, cv.NORM_MINMAX)
@@ -102,3 +105,23 @@ def bilinear_interpolation_test(img, x, y, width, height):
         valid = total / sum_weights
 
     return valid
+
+
+def ConvertDepthFromEXR(exr):
+    if len(exr.shape) > 2:
+        exr = exr[:, :, 0]
+    
+    depth = cv.normalize(exr, None, alpha=0, beta=255, norm_type=cv.NORM_MINMAX, dtype=cv.CV_32F)
+
+    return depth
+
+
+if __name__ == '__main__':
+    dir = '../data'
+    for file in os.listdir(dir):
+        if file.endswith(".exr"):
+            print(os.path.join(dir, file))
+            exr = cv.imread(os.path.join(dir, file), cv.IMREAD_UNCHANGED)
+            depth = ConvertDepthFromEXR(exr)
+            new_file_name = os.path.join(dir, file)[:-4] + '.png'
+            cv.imwrite(new_file_name, depth)

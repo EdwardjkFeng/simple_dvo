@@ -59,6 +59,7 @@ def buildPyramid(gray, depth, num_levels, focal_legth, cx, cy):
         current_K['f'] = current_f
         current_K['cx'] = current_cx
         current_K['cy'] = current_cy
+        current_K['scaling_factor'] = 5000
         pyramid_intrinsics.append(current_K)
         if level < num_levels - 1:
             current_gray = downsampleGray(current_gray)
