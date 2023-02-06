@@ -56,9 +56,9 @@ def buildPyramid(gray, depth, num_levels, focal_legth, cx, cy):
         pyramid_gray.append(current_gray)
         pyramid_depth.append(current_depth)
         current_K = dict() # Use a dict to store the intrinsic parameters
-        current_K['f'] = current_f
-        current_K['cx'] = current_cx
-        current_K['cy'] = current_cy
+        current_K['f'] = current_f / 2
+        current_K['cx'] = current_cx / 2
+        current_K['cy'] = current_cy / 2
         current_K['scaling_factor'] = 5000
         pyramid_intrinsics.append(current_K)
         if level < num_levels - 1:

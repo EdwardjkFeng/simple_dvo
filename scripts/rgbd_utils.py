@@ -1,5 +1,10 @@
 import cv2 as cv
 import numpy as np
+import torch
+
+import open3d as o3d
+# import taichi as ti
+# ti.init()
 
 import os
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
@@ -19,7 +24,6 @@ def bilinear_interpolation(img: cv.Mat, x: float, y: float, width: int, height: 
        |               |                   |
     (x0, y1) ---- (h1_x, h1_y) -------- (x1, y1)
     """
-    
     # Consider the pixel as invalid to begin with
     valid = np.nan
 
@@ -47,6 +51,7 @@ def bilinear_interpolation(img: cv.Mat, x: float, y: float, width: int, height: 
         return np.nan
 
     # Bilinear interpolate intensities
+    # print(y0, x0, y1, x1)
     h0 = x0_weight * img.item((y0, x0)) + x1_weight * img.item((y0, x1))
     h1 = x0_weight * img.item((y1, x0)) + x1_weight * img.item((y1, x1))
     valid = y0_weight * h0 + y1_weight * h1
@@ -116,12 +121,101 @@ def ConvertDepthFromEXR(exr):
     return depth
 
 
+def constructCameraMatrix(K):
+    return np.array([[K['f'], 0,      K['cx']],
+                     [0,      K['f'], K['cy']],
+                     [0,      0,      1]])
+
+
+def depth_ambigious_backprojection(
+    height: int, 
+    width: int, 
+    intrinsics: torch.Tensor
+) -> torch.Tensor:
+
+    device = intrinsics.device
+    intrinsics = intrinsics.squeeze().type(torch.FloatTensor)       # ([4, 4])
+
+    # Back-projection
+    K_inv = torch.linalg.inv(intrinsics[:3, :3]) # shape([3, 3])
+
+    n_rows = torch.arange(width).view(1, width).repeat(height, 1).to(device)
+    n_cols = torch.arange(height).view(height, 1).repeat(1, width).to(device)
+    pixel = torch.stack((n_rows, n_cols, torch.ones(height, width, device=device)), dim=2).type(torch.FloatTensor) # shape ([H, W, 3])
+
+    # Cache computed 3D points
+    depth_ambigious_point3d = torch.matmul(pixel.view(height, width, 1, 3), K_inv.T).squeeze()  # ([H, W, 3])
+
+    return depth_ambigious_point3d
+
+
+def backprojection(depth, K):
+    inv_K_mat = np.linalg.inv(constructCameraMatrix(K))
+    n_rows = np.arange(rgb.shape[1]).reshape(1, rgb.shape[1]).repeat(rgb.shape[0], axis=0)
+    n_cols = np.arange(rgb.shape[0]).reshape(rgb.shape[0], 1).repeat(rgb.shape[1], axis=1)
+    pixel = np.stack((n_rows, n_cols, np.ones(rgb.shape[:2])), axis=0)
+
+    points_3d = (inv_K_mat @ pixel.reshape(3, -1))
+
+    nonzero_depth = (depth.reshape(1, -1) != 0).squeeze()
+    points_3d = (depth.reshape(1, -1)[:, nonzero_depth] / K['scaling_factor'] * points_3d[:, nonzero_depth]).T
+
+    # height, width = depth.size()[-2:]
+    # K = torch.from_numpy(constructCameraMatrix(K))
+    # print(K, 'with shape: ', K.size())
+    # points_3d = depth_ambigious_backprojection(height, width, K)
+
+    # nonzero_depth = (depth !=0)
+    # points_3d = points_3d[nonzero_depth, :]
+    # points_3d = depth[nonzero_depth].view(-1, 1) * points_3d
+
+    return points_3d, nonzero_depth
+
+
 if __name__ == '__main__':
-    dir = '../data'
-    for file in os.listdir(dir):
-        if file.endswith(".exr"):
-            print(os.path.join(dir, file))
-            exr = cv.imread(os.path.join(dir, file), cv.IMREAD_UNCHANGED)
-            depth = ConvertDepthFromEXR(exr)
-            new_file_name = os.path.join(dir, file)[:-4] + '.png'
-            cv.imwrite(new_file_name, depth)
+    # dir = '../data/cofusion/'
+    # for file in os.listdir(dir):
+    #     if file.endswith(".exr"):
+    #         print(os.path.join(dir, file))
+    #         exr = cv.imread(os.path.join(dir, file), cv.IMREAD_UNCHANGED)
+    #         depth = ConvertDepthFromEXR(exr)
+    #         new_file_name = os.path.join(dir, file)[:-4] + '.png'
+    #         cv.imwrite(new_file_name, depth)
+
+    import time, pcd_utils, direct_image_alignment
+    # Compare the execuate time
+    dir = '../data/cofusion/'
+    rgb = dir + 'Color0001.png'
+    depth = dir + 'Depth0001.png'
+    rgb = cv.cvtColor(cv.imread(rgb, cv.IMREAD_UNCHANGED), cv.COLOR_BGR2RGB)
+    depth = img2float(cv.imread(depth, cv.IMREAD_UNCHANGED))
+
+    f = 360.0 
+    cx = 320.0
+    cy = 240.0
+    scaling_factor = 5000
+    K = dict()
+    K['f'] = f
+    K['cx'] = cx
+    K['cy'] = cy
+    K['scaling_factor'] = scaling_factor
+
+    start = time.time()
+    points, mask = backprojection(depth, K)
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.colors = o3d.utility.Vector3dVector(
+        rgb.astype(np.float64).reshape(-1, 3)[mask, :] / 255.0)
+    print("matrix time ", time.time() - start)
+    o3d.visualization.draw_geometries([pcd])
+
+    start = time.time()
+    pcd1 = direct_image_alignment.rgbd_pointcloud(rgb, depth, f, cx, cy, scaling_factor)
+    print("Iteration time ", time.time() - start)
+    o3d.visualization.draw_geometries([pcd1])
+
+    start = time.time()
+    pcd2 = pcd_utils.generate_o3d_pcd([480, 640], rgb_path='../data/cofusion/Color0001.png', depth_path='../data/cofusion/Depth0001.png', K=K, visualize=False)
+    print("o3d time ", time.time() - start)
+    o3d.visualization.draw_geometries([pcd2])
+

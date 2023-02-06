@@ -1,34 +1,55 @@
 import numpy as np
+import torch 
 
 
 epsil = 1e-6
 
-# SO(3) hat operator, asymmetric matrix
-def SO3_hat(omega):
-    
-    omega_hat = np.zeros((3, 3))
-    omega_hat[0][1] = -omega[2]
-    omega_hat[0][2] = omega[1]
-    omega_hat[1][0] = omega[2]
-    omega_hat[1][2] = -omega[0]
-    omega_hat[2][0] = -omega[1]
-    omega_hat[2][1] = omega[0]
+# so(3) hat operator, skew symmetric matrix
+def so3_hat(omega):
+    """Construct a symmetric matrix from a vector of so(3).
 
+    Args:
+        omega (np.array): a vector of so(3)
+
+    Returns:
+        _type_: _description_
+    """    
+    
+    omega_hat = np.asarray([[0, -omega[2], omega[1]], 
+                            [omega[2], 0, -omega[0]],
+                            [-omega[1], omega[0], 0]],
+                            dtype=float)
     return omega_hat
 
 
 # SO(3) exponential map
-def e_so3(omega):
+def so3_exp(omega):
+    """so(3) exponential map
+
+    Args:
+        omega (np.ndarray): rotation vector (axis-angle)
+
+    Returns:
+        R (np.ndarray): rotation matrix
+    """    
     
-    omega_hat = SO3_hat(omega)
+    omega_hat = so3_hat(omega)
     theta = np.linalg.norm(omega)
 
-    e_omega = np.eye(3) + np.sin(theta) / theta * omega_hat + (1 - np.cos(theta)) / np.power(theta, 2) * np.dot(omega_hat, omega_hat)
+    R = np.eye(3) + np.sin(theta) / theta * omega_hat + (1 - np.cos(theta)) / np.power(theta, 2) * np.dot(omega_hat, omega_hat)
 
-    return e_omega
+    return R
 
 
 def SO3_log(R):
+    """SO(3) logarithm map
+
+    Args:
+        R (np.ndarray): rotation matrix
+
+    Returns:
+        omega (np.ndarray): rotation vector
+    """    
     theta = np.arccos((np.trace(R) - 1) / 2)
     ln_R = theta / (2 * np.sin(theta)) * (R - np.transpose(R))
     omega = np.asarray([[ln_R[2, 1]], [ln_R[0, 2]], [ln_R[1, 0]]])
@@ -37,10 +58,18 @@ def SO3_log(R):
 
 
 # SE(3) exponential map
-def SE3_exp(xi):
+def se3_exp(xi):
+    """Exponential map for se(3), which is composite of u and omega 
+
+    Args:
+        xi (np.ndarray): vector of se(3), xi = (u; omega)
+
+    Returns:
+        T (np.ndarray): SE(3) matrix
+    """    
     u = xi[:3]
     omega = xi[3:]
-    omega_hat = SO3_hat(omega)
+    omega_hat = so3_hat(omega)
 
     theta = np.linalg.norm(omega)
 
@@ -65,6 +94,14 @@ def SE3_exp(xi):
 
 
 def SE3_log(T):
+    """SE(3) logarithm map
+
+    Args:
+        T (np.ndarray): 4x4 matrix in the Lie algebra SE(3)
+
+    Returns:
+        xi (np.ndarray): 6-vector of coodinates in the Lie algebra se(3), comprising two separate 3-vector: omega (rotation) and u (translation)
+    """    
     R = T[0:3, 0:3]
     t = np.reshape(T[0:3, 3], (3, 1))
     
@@ -91,7 +128,7 @@ def SE3_hat(xi):
     v = xi[:3]
     omega = xi[:3]
     xi_hat = np.zeros((4, 4)).astype(np.float32)
-    xi_hat[0:3, 0:3] = SO3_hat(omega)
+    xi_hat[0:3, 0:3] = so3_hat(omega)
     xi_hat[0:3, 3] = v
 
     return xi_hat
@@ -106,9 +143,9 @@ def SE3_curly_hat(xi):
     v = xi[:3]
     omega = xi[3:]
     xi_curly_hat = np.zeros((6, 6)).astype(np.float32)
-    omega_hat = SO3_hat(omega)
+    omega_hat = so3_hat(omega)
     xi_curly_hat[0:3, 0:3] = omega_hat
-    xi_curly_hat[0:3, 3:6] = SO3_hat(v)
+    xi_curly_hat[0:3, 3:6] = so3_hat(v)
     xi_curly_hat[3:6, 3:6] = omega_hat
 
     return xi_curly_hat
@@ -130,8 +167,8 @@ def SE3_Q(xi):
     theta_4 = theta_3 * theta
     theta_5 = theta_4 * theta
 
-    omega_hat = SO3_hat(omega)
-    v_hat = SO3_hat(v)
+    omega_hat = so3_hat(omega)
+    v_hat = so3_hat(v)
 
     c = np.cos(theta)
     s = np.cos(theta)
@@ -163,7 +200,7 @@ def SO3_left_jacobian(omega):
     """
 
     theta = np.linalg.norm(omega)
-    omega_hat = SO3_hat(omega)
+    omega_hat = so3_hat(omega)
 
     if theta < epsil:
         return np.eye(3) + 0.5 * omega_hat

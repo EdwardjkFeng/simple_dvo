@@ -3,6 +3,7 @@ Functions to compute photometric error residuals and jacobians
 """
 
 import numpy as np
+import torch
 
 import rgbd_utils 
 import se3utils
@@ -28,7 +29,7 @@ def rgbd_pointcloud(rgb, depth, focal_legth, cx, cy, scaling_factor):
             # pointcloud.append((X, Y, Z, intensity)) 
             points[v, u, :] = [X, Y, Z]
     points = np.reshape(points, (-1, 3))
-    colors = np.reshape(rgb, (-1, 3))
+    colors = np.reshape(rgb, (-1, 3)) / 255.0
     pointcloud.points = o3d.utility.Vector3dVector(points)
     pointcloud.colors = o3d.utility.Vector3dVector(colors)
     # o3d.visualization.draw_geometries([pointcloud])
@@ -57,7 +58,7 @@ def computeResiduals(gray_prev, depth_prev, gray_cur, K, xi):
     one_by_f = 1. / K['f']
 
     # Use the SE(3) Exponential map to compute a 4 x 4 matrix from the vector xi
-    T = se3utils.SE3_exp(xi)
+    T = se3utils.se3_exp(xi)
 
     K_mat = np.array([[K['f'], 0,      K['cx']],
                       [0,      K['f'], K['cy']],
@@ -67,6 +68,7 @@ def computeResiduals(gray_prev, depth_prev, gray_cur, K, xi):
     for v in range(height):
         for u in range(width):
             intensity_prev = gray_prev.item((v, u))
+            # Backproj 2D pixel to 3D point
             Z = depth_prev.item((v, u)) / K['scaling_factor']
             if Z <= 0:
                 continue
@@ -115,7 +117,7 @@ def computeResiduals_color(gray_prev, depth_prev, gray_cur, depth_cur, K, xi):
     one_by_f = 1. / K['f']
 
     # Use the SE(3) Exponential map to compute a 4 x 4 matrix from the vector xi
-    T = se3utils.SE3_exp(xi)
+    T = se3utils.se3_exp(xi)
 
     K_mat = np.array([[K['f'], 0,      K['cx']],
                       [0,      K['f'], K['cy']],
@@ -203,8 +205,8 @@ def computeJacobian(gray_prev, depth_prev, gray_cur, K, xi, residuals, cache_poi
             J_pi = np.reshape(np.asarray([[f/Z, 0, -f*X/(Z*Z)], [0, f/Z, -f*Y/(Z*Z)]]), (2, 3))
 
             J_w = np.reshape(np.asarray([[f/Z, 0, -f*X/(Z*Z), -f*(X*Y)/(Z*Z), f*(1+(X*X)/(Z*Z)), -f*Y/Z], [0, f/Z, -f*Y/(Z*Z), -f*(1+(Y*Y)/(Z*Z)), f*X*Y/(Z*Z), f*X/Z]]), (2, 6))
-            J_exp = np.concatenate((np.eye(3), se3utils.SO3_hat(-np.asarray([X, Y, Z]))), axis=1)
-            J_exp = np.dot(J_exp, se3utils.SE3_left_jacobian(xi))
+            # J_exp = np.concatenate((np.eye(3), se3utils.so3_hat(-np.asarray([X, Y, Z]))), axis=1)
+            # J_exp = np.dot(J_exp, se3utils.SE3_left_jacobian(xi))
             # J[v, u, :] = residuals[v, u] * np.reshape(np.dot(J_img, np.dot(J_pi, J_exp)), (6))
             J[v, u, :] = - np.reshape(np.matmul(J_img, J_w), (6))
             if not np.isfinite(J[v, u, 0]):
@@ -247,7 +249,7 @@ def computeJacobian_color(gray_prev, depth_prev, gray_cur, depth_cur, K, xi, res
 
             J_img = np.reshape(np.asarray([[grad_x[v, u], grad_y[v, u]]]), (1, 2))
             J_pi = np.reshape(np.asarray([[f/Z, 0, -f*X/(Z*Z)], [0, f/Z, -f*Y/(Z*Z)]]), (2, 3))
-            J_exp = np.concatenate((np.eye(3), se3utils.SO3_hat(-np.asarray([X, Y, Z]))), axis=1)
+            J_exp = np.concatenate((np.eye(3), se3utils.so3_hat(-np.asarray([X, Y, Z]))), axis=1)
             J_exp = np.dot(J_exp, se3utils.SE3_left_jacobian(xi))
 
             J_depth = np.reshape(np.asarray([[grad_u[v, u], grad_v[v, u]]]), (1, 2))
@@ -278,10 +280,10 @@ def do_gaussian_newton(img_gray_prev, img_depth_prev, img_gray_cur, xi, K, max_i
         inc = - np.linalg.solve(H, b)
 
         xi_prev = xi
-        xi = se3utils.SE3_log(se3utils.SE3_exp(xi) @ se3utils.SE3_exp(inc))
+        xi = se3utils.SE3_log(se3utils.se3_exp(xi) @ se3utils.se3_exp(inc))
 
         if (err / err_prev > 0.995):
             break
         err_prev = err
 
-    return se3utils.SE3_exp(xi), xi
+    return se3utils.se3_exp(xi), xi

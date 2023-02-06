@@ -27,14 +27,16 @@ def parse_arg():
         RGB frame to be processed', required = True)
     parser.add_argument('-endFrameDepth', help='Filename (sans the .png extension) of the last \
         depth frame to be processed', required = True)
-    parser.add_argument('-numPyramidLevels', help='Number of the levels used in the pyramid', default=1)
-    parser.add_argument('-stepsize', help='Stepsize for gradient descent solver', default=1e-6)
-    parser.add_argument('-numIters', help='Number of iterations to run each optimization \
+    parser.add_argument('-numPyramidLevels', type=int, help='Number of the levels used in the pyramid', default=1)
+    parser.add_argument('-stepsize', type=float, help='Stepsize for gradient descent solver', default=1e-6)
+    parser.add_argument('-numIters', type=int, help='Number of iterations to run each optimization \
         routine for', default=50)
-    parser.add_argument('-tol', help='Tolerance parameter for gradient-based optimization. \
+    parser.add_argument('-tol', type=float, help='Tolerance parameter for gradient-based optimization. \
         Specifies the amount by which loss must change across successive iterations', default=1e-8)
 
     args = parser.parse_args()
+
+    # python vo.py -datapath ../data/cofusion -startFrameRGB Color0001 -startFrameDepth Depth0001 -endFrameRGB Color0002 -endFrameDepth Depth0002
 
     return args
 
@@ -42,24 +44,24 @@ def parse_arg():
 def main(args):
 
     # Read images
-    img_prev = cv.imread(os.path.join(args.datapath, args.startFrameRGB + '.png'))
-    img_cur = cv.imread(os.path.join(args.datapath, args.endFrameRGB + '.png'))
+    img_prev = cv.cvtColor(cv.imread(os.path.join(args.datapath, args.startFrameRGB + '.png')), cv.COLOR_BGR2RGB)
+    img_cur = cv.cvtColor(cv.imread(os.path.join(args.datapath, args.endFrameRGB + '.png')), cv.COLOR_BGR2RGB)
     img_depth_prev = cv.imread(os.path.join(args.datapath, args.startFrameDepth + '.png'), cv.IMREAD_GRAYSCALE)
     img_depth_cur = cv.imread(os.path.join(args.datapath, args.endFrameDepth + '.png'), cv.IMREAD_GRAYSCALE)
 
-    img_gray_prev = cv.cvtColor(img_prev, cv.COLOR_RGBA2GRAY)
+    img_gray_prev = cv.cvtColor(img_prev, cv.COLOR_RGB2GRAY)
     img_gray_cur = cv.cvtColor(img_cur, cv.COLOR_RGB2GRAY)
     # Convert the intensity images to float
-    img_prev = rgbd_utils.img2float(img_prev)
-    img_cur = rgbd_utils.img2float(img_cur)
+    # img_prev = rgbd_utils.img2float(img_prev)
+    # img_cur = rgbd_utils.img2float(img_cur)
     img_gray_prev = rgbd_utils.img2float(img_gray_prev)
     img_gray_cur = rgbd_utils.img2float(img_gray_cur)
     
     # Use default camera intrinsics
-    f = 525.0
-    cx = 319.5
-    cy = 239.5
-    scaling_factor = 5000
+    f = 360 #525.0
+    cx = 320 #319.5
+    cy = 240 #239.5
+    scaling_factor = 1 #5000
 
     # Construct a downsampled pyramid using the specified number of pyramid levels
     pyramid_gray, pyramid_depth, pyramid_intrinsics = image_pyramid.buildPyramid(img_gray_prev, \
@@ -101,9 +103,9 @@ def main(args):
     # J = direct_image_alignment.computeJacobian(img_gray_prev, img_depth_prev, img_gray_cur, img_depth_cur, K, xi_init, residuals, cache_point3d)
 
     # Simple gradient descent test
-    stepsize = 1e-6
-    max_iters = 50
-    tol = 1e-8
+    stepsize = args.stepsize
+    max_iters = args.numIters
+    tol = args.tol
     err_prev = 1e24
     # for it in range(max_iters):
     #     residuals, cache_point3d = direct_image_alignment.computeResiduals(img_gray_prev, img_depth_prev, img_gray_cur, K, xi_init)
@@ -136,8 +138,8 @@ def main(args):
 
     gray_cur, depth_cur, _ = image_pyramid.buildPyramid(img_gray_cur, img_depth_cur, num_levels=args.numPyramidLevels, focal_legth=f, cx=cx, cy=cy)
             
-    for i in range(args.numPyramidLevels):
-        T, xi_init = direct_image_alignment.do_gaussian_newton(gray_prev[i], depth_prev[i], gray_cur[i], xi_init, pyramid_intrinsics[i], max_iters)
+    for i in range(1, args.numPyramidLevels + 1):
+        T, xi_init = direct_image_alignment.do_gaussian_newton(gray_prev[-i], depth_prev[-i], gray_cur[-i], xi_init, pyramid_intrinsics[-i], max_iters)
 
 
     # T = direct_image_alignment.do_gaussian_newton(img_gray_prev, img_depth_prev, img_gray_cur, xi_init, K, max_iters)
