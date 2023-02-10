@@ -124,6 +124,7 @@ def computeResiduals_color(gray_prev, depth_prev, gray_cur, depth_cur, K, xi):
                       [0,      0,      1]])
 
     # Warp each point in the previous image, to the current image
+    c = 0
     for v in range(height):
         for u in range(width):
             intensity_prev = gray_prev.item((v, u))
@@ -201,7 +202,8 @@ def computeJacobian(gray_prev, depth_prev, gray_cur, K, xi, residuals, cache_poi
             if Z <= 0:
                 continue
 
-            J_img = np.reshape(np.asarray([[grad_x[v, u], grad_y[v, u]]]), (1, 2))
+            J_img = np.reshape(np.asarray([[
+                rgbd_utils.bilinear_interpolation(grad_x, X/Z, Y/Z, width, height)], [rgbd_utils.bilinear_interpolation(grad_y, X/Z, Y/Z, width, height)]]), (1, 2))
             J_pi = np.reshape(np.asarray([[f/Z, 0, -f*X/(Z*Z)], [0, f/Z, -f*Y/(Z*Z)]]), (2, 3))
 
             J_w = np.reshape(np.asarray([[f/Z, 0, -f*X/(Z*Z), -f*(X*Y)/(Z*Z), f*(1+(X*X)/(Z*Z)), -f*Y/Z], [0, f/Z, -f*Y/(Z*Z), -f*(1+(Y*Y)/(Z*Z)), f*X*Y/(Z*Z), f*X/Z]]), (2, 6))
@@ -274,6 +276,7 @@ def do_gaussian_newton(img_gray_prev, img_depth_prev, img_gray_cur, xi, K, max_i
         Jt = J.transpose()
 
         err = np.sum(np.matmul(residuals.transpose(), residuals))
+        print('error: ', err)
 
         b = np.matmul(Jt, residuals.reshape(-1))
         H = np.matmul(Jt, J)
@@ -282,8 +285,10 @@ def do_gaussian_newton(img_gray_prev, img_depth_prev, img_gray_cur, xi, K, max_i
         xi_prev = xi
         xi = se3utils.SE3_log(se3utils.se3_exp(xi) @ se3utils.se3_exp(inc))
 
-        if (err / err_prev > 0.995):
-            break
+        # if (err / err_prev > 0.995):
+        #     print('num of iter: ', iter, '\nT: ', se3utils.se3_exp(xi))
+        #     break
         err_prev = err
+        print('num of iter: ', iter, '\nT: ', se3utils.se3_exp(xi))
 
     return se3utils.se3_exp(xi), xi

@@ -15,7 +15,7 @@ if __name__ ==  '__main__':
     depth2 = cv.imread('../data/depth2.png', 0)
     n_depth1 = utils.img2float(depth1)
 
-    show = False
+    show = True
     if show:
         cv.imshow("rgb1", rgb1)
         cv.imshow("rgb2", rgb2)

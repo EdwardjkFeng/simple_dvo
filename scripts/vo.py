@@ -138,7 +138,7 @@ def main(args):
 
     gray_cur, depth_cur, _ = image_pyramid.buildPyramid(img_gray_cur, img_depth_cur, num_levels=args.numPyramidLevels, focal_legth=f, cx=cx, cy=cy)
             
-    for i in range(1, args.numPyramidLevels + 1):
+    for i in range(1, 2): #args.numPyramidLevels + 1):
         T, xi_init = direct_image_alignment.do_gaussian_newton(gray_prev[-i], depth_prev[-i], gray_cur[-i], xi_init, pyramid_intrinsics[-i], max_iters)
 
 

@@ -27,11 +27,12 @@ def downsampleDepth(img: cv.Mat) -> cv.Mat:
 
     # Perform block-averaging, but not across depth boundaries. (i.e., compute average only over
     # non-zero elements)
+
     img_ = np.stack([img[0::2, 0::2], img[0::2, 1::2], img[1::2, 0::2], img[1::2, 1::2]], axis=2)
     num_nonzero = np.count_nonzero(img_, axis=2)
     num_nonzero[np.where(num_nonzero == 0)] = 1
-    img_new = np.sum(img_, axis=2) / 4 / num_nonzero
-
+    img_new = np.sum(img_, axis=2) / num_nonzero
+    
     return img_new.astype(np.uint8)
 
 

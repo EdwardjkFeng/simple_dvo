@@ -215,7 +215,7 @@ if __name__ == '__main__':
     o3d.visualization.draw_geometries([pcd1])
 
     start = time.time()
-    pcd2 = pcd_utils.generate_o3d_pcd([480, 640], rgb_path='../data/cofusion/Color0001.png', depth_path='../data/cofusion/Depth0001.png', K=K, visualize=False)
+    pcd2 = pcd_utils.generate_o3d_pcd([640, 480], rgb_path='../data/cofusion/Color0001.png', depth_path='../data/cofusion/Depth0001.png', K=K, visualize=False)
     print("o3d time ", time.time() - start)
     o3d.visualization.draw_geometries([pcd2])
 
